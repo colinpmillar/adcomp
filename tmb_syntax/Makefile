@@ -11,6 +11,9 @@ report:
 test_reload:
 	R --slave < test_reload.R
 
+nan_error_ex:
+	echo "TMB:::gdbsource('nan_error_ex.R')" | R --vanilla
+
 clean :
 	rm -rf *.o *.so *.dll *~ core *.output.RData *.pdf *.profile
 	rm -rf */*.o */*.so */*.dll */*~ core */*.output.RData */*.pdf */*.profile
