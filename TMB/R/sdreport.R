@@ -245,7 +245,7 @@ sdreport <- function(obj,par.fixed=NULL,hessian.fixed=NULL,getJointPrecision=FAL
   if(bias.correct){
       epsilon <- rep(0,length(phi))
       parameters <- obj$env$parameters
-      parameters[[length(parameters)+1]] <- epsilon
+      parameters <- c(parameters, list(TMB_epsilon_ = epsilon) )
       obj3 <- MakeADFun(obj$env$data,
                         parameters,
                         random = obj$env$random,
