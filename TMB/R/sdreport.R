@@ -291,7 +291,12 @@ sdreport <- function(obj,par.fixed=NULL,hessian.fixed=NULL,getJointPrecision=FAL
           names(estimate) <- names(epsilon)
           list(value=estimate, sd=sqrt(diag(Vestimate)), cov=Vestimate)
       }
-      split <- bias.correct.control$split
+      if(is.null(bias.correct.control$nsplit)) {
+          split <- bias.correct.control$split
+      } else {
+          split <- split(seq_along(phi),
+                         cut(seq_along(phi), nsplit))
+      }
       if( is.null( split ) ){ ## Get all
           ans$unbiased <- doEpsilonMethod()
       } else {
