@@ -291,7 +291,8 @@ sdreport <- function(obj,par.fixed=NULL,hessian.fixed=NULL,getJointPrecision=FAL
           names(estimate) <- names(epsilon)
           list(value=estimate, sd=sqrt(diag(Vestimate)), cov=Vestimate)
       }
-      if(is.null(bias.correct.control$nsplit)) {
+      nsplit <- bias.correct.control$nsplit
+      if(is.null(nsplit)) {
           split <- bias.correct.control$split
       } else {
           split <- split(seq_along(phi),
@@ -301,14 +302,18 @@ sdreport <- function(obj,par.fixed=NULL,hessian.fixed=NULL,getJointPrecision=FAL
           ans$unbiased <- doEpsilonMethod()
       } else {
           tmp <- lapply(split, doEpsilonMethod)
+          m <- if (bias.correct.control$sd)
+                   length(phi) else 1
           ans$unbiased <- list(value = rep(NA, length(phi)),
-                               sd    = rep(NA, length(phi)),
-                               cov   = matrix(NA, length(phi), length(phi) ))
+                               sd    = rep(NA, m),
+                               cov   = matrix(NA, m, m))
           for(i in seq_along(split)) {
               ans$unbiased$value[ split[[i]] ] <- tmp[[i]]$value
-              ans$unbiased$sd   [ split[[i]] ] <- tmp[[i]]$sd
-              ans$unbiased$cov  [ split[[i]],
-                                  split[[i]] ] <- tmp[[i]]$cov
+              if (bias.correct.control$sd) {
+                  ans$unbiased$sd   [ split[[i]] ] <- tmp[[i]]$sd
+                  ans$unbiased$cov  [ split[[i]],
+                                      split[[i]] ] <- tmp[[i]]$cov
+              }
           }
       }
   }
