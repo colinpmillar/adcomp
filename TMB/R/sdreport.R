@@ -117,7 +117,7 @@
 ##' plot(rowSums(exp(s)))
 ##' mean(rowSums(exp(s))) }
 sdreport <- function(obj,par.fixed=NULL,hessian.fixed=NULL,getJointPrecision=FALSE,bias.correct=FALSE,
-                     bias.correct.control=list(sd=FALSE), ignore.parm.uncertainty = FALSE,
+                     bias.correct.control=list(sd=FALSE, split=NULL), ignore.parm.uncertainty = FALSE,
                      getReportCovariance=TRUE){
   if(is.null(obj$env$ADGrad) & (!is.null(obj$env$random)))
     stop("Cannot calculate sd's without type ADGrad available in object for random effect models.")
@@ -244,43 +244,68 @@ sdreport <- function(obj,par.fixed=NULL,hessian.fixed=NULL,getJointPrecision=FAL
   ## ======== Calculate bias corrected random effects estimates if requested
   if(bias.correct){
       epsilon <- rep(0,length(phi))
+      names(epsilon) <- names(phi)
       parameters <- obj$env$parameters
       parameters <- c(parameters, list(TMB_epsilon_ = epsilon) )
-      obj3 <- MakeADFun(obj$env$data,
-                        parameters,
-                        random = obj$env$random,
-                        checkParameterOrder = FALSE,
-                        DLL = obj$env$DLL,
-                        silent = obj$env$silent)
-      ## Get good initial parameters
-      obj3$env$start <- c(par, epsilon)
-      obj3$env$random.start <- expression(start[random])
-      ## Test if Hessian pattern is un-changed
-      h <- obj$env$spHess(random=TRUE)
-      h3 <- obj3$env$spHess(random=TRUE)
-      pattern.unchanged <- identical(h@i,h3@i) & identical(h@p,h3@p)
-      ## If pattern un-changed we can re-use symbolic Cholesky:
-      if(pattern.unchanged){
-          if(!obj$env$silent)
-              cat("Re-using symbolic Cholesky\n")
-          obj3$env$L.created.by.newton <- L
-      } else {
-          if( .Call("have_tmb_symbolic", PACKAGE = "TMB") )
-              runSymbolicAnalysis(obj3)
+      doEpsilonMethod <- function(chunk = NULL) {
+          if(!is.null(chunk)) { ## Only do *chunk*
+              mapfac <- rep(NA, length(phi))
+              mapfac[chunk] <- chunk
+              parameters$TMB_epsilon_ <- updateMap(parameters$TMB_epsilon_,
+                                                   factor(mapfac) )
+          }
+          obj3 <- MakeADFun(obj$env$data,
+                            parameters,
+                            random = obj$env$random,
+                            checkParameterOrder = FALSE,
+                            DLL = obj$env$DLL,
+                            silent = obj$env$silent)
+          ## Get good initial parameters
+          obj3$env$start <- c(par, epsilon)
+          obj3$env$random.start <- expression(start[random])
+          ## Test if Hessian pattern is un-changed
+          h <- obj$env$spHess(random=TRUE)
+          h3 <- obj3$env$spHess(random=TRUE)
+          pattern.unchanged <- identical(h@i,h3@i) & identical(h@p,h3@p)
+          ## If pattern un-changed we can re-use symbolic Cholesky:
+          if(pattern.unchanged){
+              if(!obj$env$silent)
+                  cat("Re-using symbolic Cholesky\n")
+              obj3$env$L.created.by.newton <- L
+          } else {
+              if( .Call("have_tmb_symbolic", PACKAGE = "TMB") )
+                  runSymbolicAnalysis(obj3)
+          }
+          if(!is.null(chunk)) epsilon <- epsilon[chunk]
+          par.full <- c(par.fixed, epsilon)
+          i <- (1:length(par.full)) > length(par.fixed) ## epsilon indices
+          grad <- obj3$gr(par.full)
+          Vestimate <-
+              if(bias.correct.control$sd) {
+                  ## requireNamespace("numDeriv")
+                  hess <- numDeriv::jacobian(obj3$gr, par.full)
+                  -hess[i,i] + hess[i,!i] %*% Vtheta %*% hess[!i,i]
+              } else
+                  matrix(NA)
+          estimate <- grad[i]
+          names(estimate) <- names(epsilon)
+          list(value=estimate, sd=sqrt(diag(Vestimate)), cov=Vestimate)
       }
-      par.full <- c(par.fixed,epsilon)
-      i <- (1:length(par.full))>length(par.fixed) ## epsilon indices
-      grad <- obj3$gr(par.full)
-      Vestimate <-
-          if(bias.correct.control$sd) {
-              ## requireNamespace("numDeriv")
-              hess <- numDeriv::jacobian(obj3$gr,par.full)
-              -hess[i,i] + hess[i,!i] %*% Vtheta %*% hess[!i,i]
-          } else
-              matrix(NA)
-      estimate <- grad[i]
-      names(estimate) <- names(phi)
-      ans$unbiased <- list(value=estimate, sd=sqrt(diag(Vestimate)), cov=Vestimate)
+      split <- bias.correct.control$split
+      if( is.null( split ) ){ ## Get all
+          ans$unbiased <- doEpsilonMethod()
+      } else {
+          tmp <- lapply(split, doEpsilonMethod)
+          ans$unbiased <- list(value = rep(NA, length(phi)),
+                               sd    = rep(NA, length(phi)),
+                               cov   = matrix(NA, length(phi), length(phi) ))
+          for(i in seq_along(split)) {
+              ans$unbiased$value[ split[[i]] ] <- tmp[[i]]$value
+              ans$unbiased$sd   [ split[[i]] ] <- tmp[[i]]$sd
+              ans$unbiased$cov  [ split[[i]],
+                                  split[[i]] ] <- tmp[[i]]$cov
+          }
+      }
   }
   ## ======== Find marginal variances of all random effects i.e. phi(u,theta)=u
   if(!is.null(r)){
