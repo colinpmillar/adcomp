@@ -1462,14 +1462,25 @@ runSymbolicAnalysis <- function(obj){
   NULL
 }
 
-install.contrib <- function(url){
+## skip.top.level: Skips the top level of unzipped directory.
+install.contrib <- function(url, skip.top.level = FALSE){
+    owd <- getwd()
+    on.exit(setwd(owd))
     contrib.folder <- paste0(system.file("include",package="TMB"), "/contrib" )
     if( !file.exists( contrib.folder ) ) {
         dir.create(contrib.folder)
     }
     zipfile <- tempfile(fileext = ".zip")
     download.file(url, destfile = zipfile)
-    unzip(zipfile, exdir = contrib.folder, junkpaths = TRUE) ## FIXME: subfolders
+    if(skip.top.level) {
+        df <- unzip(zipfile, list=TRUE)
+        unzip(zipfile, exdir = tempdir())
+        setwd(tempdir())
+        setwd(df$Name[1])
+        file.copy(dir(), contrib.folder, recursive=TRUE)
+    } else {
+        unzip(zipfile, exdir = contrib.folder)
+    }
     file.remove(zipfile)
     cat("NOTE:",contrib.folder,"\n")
     dir(contrib.folder)
