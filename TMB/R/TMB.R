@@ -1462,8 +1462,9 @@ runSymbolicAnalysis <- function(obj){
   NULL
 }
 
+## url: Can be local or remote zipfile
 ## skip.top.level: Skips the top level of unzipped directory.
-install.contrib <- function(url, skip.top.level = FALSE){
+install.contrib <- function(url, skip.top.level = FALSE) {
     owd <- getwd()
     on.exit(setwd(owd))
     contrib.folder <- paste0(system.file("include",package="TMB"), "/contrib" )
@@ -1471,17 +1472,28 @@ install.contrib <- function(url, skip.top.level = FALSE){
         dir.create(contrib.folder)
     }
     zipfile <- tempfile(fileext = ".zip")
-    download.file(url, destfile = zipfile)
-    if(skip.top.level) {
-        df <- unzip(zipfile, list=TRUE)
-        unzip(zipfile, exdir = tempdir())
-        setwd(tempdir())
-        setwd(df$Name[1])
-        file.copy(dir(), contrib.folder, recursive=TRUE)
+    if(file.exists(url)) {
+        ## Local zip file
+        file.copy(url, zipfile)
     } else {
-        unzip(zipfile, exdir = contrib.folder)
+        ## Remote zipfile
+        download.file(url, destfile = zipfile)
     }
+    tmp.folder <- tempfile()
+    dir.create(tmp.folder)
+    df <- unzip(zipfile, list=TRUE)
+    unzip(zipfile, exdir = tmp.folder)
+    setwd(tmp.folder)
+    ## If unzipped archive is a single folder then strip "-master" from name
+    if(length(dir()) == 1) {
+        if(file_test("-d", dir())) {
+            file.rename(dir(), sub("-master$","",dir()))
+        }
+        if(skip.top.level) setwd(dir())
+    }
+    file.copy(dir(), contrib.folder, recursive=TRUE)
     file.remove(zipfile)
+    unlink(tmp.folder, recursive=TRUE)
     cat("NOTE:",contrib.folder,"\n")
     dir(contrib.folder)
 }
