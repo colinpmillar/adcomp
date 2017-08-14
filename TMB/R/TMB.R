@@ -19,6 +19,22 @@ grepRandomParameters <- function(parameters,random){
     x
 }
 
+## Associate a 'map' with *one* entry in a parameter list
+updateMap <- function(parameter.entry, map.entry) {
+    ## Shortened parameter
+    ans <- tapply(parameter.entry, map.entry, mean)
+    if(length(ans) == 0) ans <- as.numeric(ans) ## (zero-length case)
+    ## Integer code used to fill short into original shape
+    fnew <- unclass(map.entry)
+    fnew[!is.finite(fnew)] <- 0L
+    fnew <- fnew - 1L
+    ## Output
+    attr(ans,"shape") <- parameter.entry
+    attr(ans,"map") <- fnew
+    attr(ans,"nlevels") <- length(ans)
+    ans
+}
+
 ## Guess name of user's loaded DLL code
 getUserDLL <- function(){
     dlls <- getLoadedDLLs()
@@ -132,7 +148,7 @@ isNullPointer <- function(pointer) {
 ##' @param ADreport Calculate derivatives of macro ADREPORT(vector) instead of objective_function return value?
 ##' @param atomic Allow tape to contain atomic functions?
 ##' @param LaplaceNonZeroGradient Allow Taylor expansion around non-stationary point?
-##' @param DLL Name of shared object file compiled by user.
+##' @param DLL Name of shared object file compiled by user (without the conventional extension, \file{.so}, \file{.dll}, \dots).
 ##' @param checkParameterOrder Optional check for correct parameter order.
 ##' @param regexp Match random effects by regular expressions?
 ##' @param silent Disable all tracing information?
@@ -158,8 +174,8 @@ MakeADFun <- function(data, parameters, map=list(),
   env <- environment() ## This environment
   if(!is.list(data))
     stop("'data' must be a list")
-  ok <- function(x)(is.matrix(x)|is.vector(x)|is.array(x))&is.numeric(x)
-  ok.data <- function(x)ok(x)|is.factor(x)|is(x,"sparseMatrix")|is.list(x)
+  ok <- function(x)(is.matrix(x)|is.vector(x)|is.array(x))&(is.numeric(x)|is.logical(x))
+  ok.data <- function(x)ok(x)|is.factor(x)|is(x,"sparseMatrix")|is.list(x)|(is.character(x)&length(x)==1)
   check.passed <- function(x){
     y <- attr(x,"check.passed")
     if(is.null(y)) FALSE else y
@@ -169,7 +185,7 @@ MakeADFun <- function(data, parameters, map=list(),
       cat("Problem with these data entries:\n")
       print(which(!sapply(data,ok.data)))
       stop("Only numeric matrices, vectors, arrays, ",
-           "factors or lists ",
+           "factors, lists or length-1-characters ",
            "can be interfaced")
     }
   }
@@ -186,7 +202,13 @@ MakeADFun <- function(data, parameters, map=list(),
       if(is.list(x)) return( lapply(x, dataSanitize) )
       if(is(x,"sparseMatrix")){
         x <- as(x,"dgTMatrix")
-      } else {
+      }
+      else if (is.character(x))
+      {
+        ## Do nothing
+      }
+      else
+      {
         if(is.factor(x))x <- unclass(x)-1L ## Factors are passed as 0-based integers !!!
         storage.mode(x) <- "double"
       }
@@ -237,18 +259,7 @@ MakeADFun <- function(data, parameters, map=list(),
     param.map <- lapply(names(map),
                         function(nam)
                         {
-                          ## Shortened parameter
-                          ans <- tapply(parameters[[nam]],map[[nam]],mean)
-                          if(length(ans)==0)ans <- as.numeric(ans) ## (zero-length case)
-                          ## Integer code used to fill short into original shape
-                          fnew <- unclass(map[[nam]])
-                          fnew[!is.finite(fnew)] <- 0L
-                          fnew <- fnew-1L
-                          ## Output
-                          attr(ans,"shape") <- parameters[[nam]]
-                          attr(ans,"map") <- fnew
-                          attr(ans,"nlevels") <- length(ans)
-                          ans
+                            updateMap(parameters[[nam]], map[[nam]])
                         })
     ## Now do the change:
     keepAttrib( parameters[names(map)] ) <- param.map
@@ -323,7 +334,7 @@ MakeADFun <- function(data, parameters, map=list(),
       ## Have to call "double-template" to trigger tape generation
       Fun <<- .Call("MakeDoubleFunObject",data,parameters,reportenv,PACKAGE=DLL)
       ## Hack: unlist(parameters) only guarantied to be a permutation of the parameter vecter.
-      .Call("EvalDoubleFunObject",Fun$ptr,unlist(parameters),control=list(order=as.integer(0)),PACKAGE=DLL)
+      .Call("EvalDoubleFunObject",Fun$ptr,unlist(parameters),control=list(do_simulate=as.integer(0)),PACKAGE=DLL)
     }
     if(is.character(profile)){
         random <<- c(random, profile)
@@ -395,7 +406,7 @@ MakeADFun <- function(data, parameters, map=list(),
   f <- function(theta=par, order=0, type="ADdouble",
                 cols=NULL, rows=NULL,
                 sparsitypattern=0, rangecomponent=1, rangeweight=NULL,
-                dumpstack=0, doforward=1) {
+                dumpstack=0, doforward=1, do_simulate=0) {
     if(isNullPointer(ADFun$ptr)) {
         if(silent)beSilent()
         retape()
@@ -411,7 +422,8 @@ MakeADFun <- function(data, parameters, map=list(),
                                  rangecomponent=as.integer(rangecomponent),
                                  rangeweight=rangeweight,
                                  dumpstack=as.integer(dumpstack),
-                                 doforward=as.integer(doforward)
+                                 doforward=as.integer(doforward),
+                                 do_simulate=as.integer(do_simulate)
                                ),
                        PACKAGE=DLL
                        )
@@ -422,7 +434,7 @@ MakeADFun <- function(data, parameters, map=list(),
 
         "double" = {
           res <- .Call("EvalDoubleFunObject", Fun$ptr, theta,
-                       control=list(order=as.integer(order)),PACKAGE=DLL)
+                       control=list(do_simulate=as.integer(do_simulate)),PACKAGE=DLL)
         },
 
         "ADGrad" = {
@@ -764,6 +776,17 @@ MakeADFun <- function(data, parameters, map=list(),
     f(par,order=0,type="double")
     as.list(reportenv)
   }
+  simulate <- function(par = last.par, complete = FALSE){
+    f(par, order = 0, type = "double", do_simulate = TRUE)
+    sim <- as.list(reportenv)
+    if(complete){
+        ans <- data
+        ans[names(sim)] <- sim
+    } else {
+        ans <- sim
+    }
+    ans
+  }
 
   ## return :
   if(is.null(random)) {  ## Output if pure fixed effect model
@@ -794,7 +817,8 @@ MakeADFun <- function(data, parameters, map=list(),
          },
          hessian=hessian, method=method,
          retape=retape, env=env,
-         report=report,...)
+         report=report,
+         simulate=simulate,...)
   }
   else { ## !is.null(random) :  Output if random effect model
     list(par=par[-random],
@@ -831,7 +855,8 @@ MakeADFun <- function(data, parameters, map=list(),
          },
          hessian=hessian, method=method,
          retape=retape, env=env,
-         report=report, ...)
+         report=report,
+         simulate=simulate, ...)
   }
 }## end{ MakeADFun }
 
@@ -877,11 +902,12 @@ openmp <- function(n=NULL){
 ##' @param openmp Turn on openmp flag? Auto detected for parallel templates.
 ##' @param libtmb Use precompiled TMB library if available (to speed up compilation)?
 ##' @param libinit Turn on preprocessor flag to register native routines?
+##' @param tracesweep Turn on preprocessor flag to trace AD sweeps? (Silently disables \code{libtmb})
 ##' @param ... Passed as Makeconf variables.
 ##' @seealso \code{\link{precompile}}
 compile <- function(file,flags="",safebounds=TRUE,safeunload=TRUE,
                     openmp=isParallelTemplate(file[1]),libtmb=TRUE,
-                    libinit=TRUE,...){
+                    libinit=TRUE,tracesweep=FALSE,...){
   if(.Platform$OS.type=="windows"){
     ## Overload system.file
     system.file <- function(...){
@@ -889,6 +915,8 @@ compile <- function(file,flags="",safebounds=TRUE,safeunload=TRUE,
       chartr("\\", "/", shortPathName(ans))
     }
   }
+  ## Cannot use the pre-compiled library when enabling sweep tracing
+  if (tracesweep) libtmb <- FALSE
   ## libtmb existence
   debug <-
       length(grep("-O0", flags)) &&
@@ -955,7 +983,8 @@ compile <- function(file,flags="",safebounds=TRUE,safeunload=TRUE,
                    "-DTMB_SAFEBOUNDS"[safebounds],
                    paste0("-DLIB_UNLOAD=R_unload_",libname)[safeunload],
                    "-DWITH_LIBTMB"[libtmb],
-                   paste0("-DTMB_LIB_INIT=R_init_",libname)[libinit]
+                   paste0("-DTMB_LIB_INIT=R_init_",libname)[libinit],
+                   "-DCPPAD_FORWARD0SWEEP_TRACE"[tracesweep]
                    )
   ## Makevars specific for template
   mvfile <- makevars(PKG_CPPFLAGS=ppflags,
@@ -1377,6 +1406,7 @@ newtonOption <- function(obj,...){
 
 sparseHessianFun <- function(obj, skipFixedEffects=FALSE) {
   r <- obj$env$random
+  if (length(r) == 0) return (NULL)
   skip <-
     if(skipFixedEffects) {
       ## Assuming that random effects comes first in parameter list, we can set

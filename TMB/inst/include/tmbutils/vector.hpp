@@ -53,21 +53,23 @@ struct vector : Array<Type,Dynamic,1>
      1. vector<Type> to CppAD::vector<Type>
      2. vector<int> to CppAD::vector<double>
    */
-  template<template<class> class Vector, class T>
-  operator Vector<T>(){
+  template<class T>
+  operator CppAD::vector<T>(){
     int n = this->size();
-    Vector<T> x(n);
+    CppAD::vector<T> x(n);
     for(int i=0; i<n; i++) x[i] = T(this->operator[](i));
     return x;
   }
   /* Convert to _this_ vector class
      Examples:
-     1. vector<int> to vector<double>
-     2. CppAD::vector<Type> to vector<Type> 
-     3. CppAD::vector<int> to vector<double> 
+     2. CppAD::vector<Type> to vector<Type>
+     3. CppAD::vector<int> to vector<double>
+
+     FIXME:
+     Which one takes care of: vector<int> to vector<double> ?
   */
-  template<template<class> class Vector, class T>
-  vector(Vector<T> x):Base(){
+  template<class T>
+  vector(CppAD::vector<T> x):Base(){
     int n = x.size();
     this->resize(n);
     for(int i=0; i<n; i++) this->operator[](i) = Type(x[i]);

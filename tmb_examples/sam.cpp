@@ -43,10 +43,8 @@ Type square(Type x){return x*x;}
 template<class Type>
 Type objective_function<Type>::operator() ()
 {
-  DATA_INTEGER(noFleets);
   DATA_VECTOR(fleetTypes); 
   DATA_VECTOR(sampleTimes);
-  DATA_INTEGER(noYears);
   DATA_VECTOR(years);
   DATA_INTEGER(nobs);
   DATA_VECTOR(idx1);
@@ -62,17 +60,14 @@ Type objective_function<Type>::operator() ()
   DATA_ARRAY(propF);
   DATA_ARRAY(propM);
   DATA_INTEGER(minAge);
-  DATA_INTEGER(maxAge);
   DATA_INTEGER(maxAgePlusGroup);
   DATA_IARRAY(keyLogFsta);
-  DATA_INTEGER(corFlag);
   DATA_ARRAY(keyLogFpar);
   DATA_ARRAY(keyQpow);
   DATA_ARRAY(keyVarF);
   DATA_ARRAY(keyVarLogN); 
   DATA_ARRAY(keyVarObs); 
   DATA_INTEGER(stockRecruitmentModelCode);
-  DATA_INTEGER(noScaledYears);
   DATA_VECTOR(fbarRange);
 
   PARAMETER_VECTOR(logFpar); 
@@ -82,14 +77,11 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(logSdLogObs); 
   PARAMETER(rec_loga); 
   PARAMETER(rec_logb); 
-  //PARAMETER(logit_rho); 
   PARAMETER(rho); 
   PARAMETER_VECTOR(logScale); 
   PARAMETER_VECTOR(logScaleSSB); 
   PARAMETER_VECTOR(logPowSSB); 
   PARAMETER_VECTOR(logSdSSB); 
-  // PARAMETER_ARRAY(logF); 
-  // PARAMETER_ARRAY(logN);
   PARAMETER_ARRAY(U);
   DATA_INTEGER(nlogF);
   DATA_INTEGER(nlogN);
@@ -134,7 +126,10 @@ Type objective_function<Type>::operator() ()
   MVNORM_t<Type> neg_log_densityF(fvar);
   Type ans=0;
   for(int i=1;i<timeSteps;i++){    
-     ans+=neg_log_densityF(logF.col(i)-logF.col(i-1)); // F-Process likelihood 
+     ans+=neg_log_densityF(logF.col(i)-logF.col(i-1)); // F-Process likelihood
+     SIMULATE {
+       logF.col(i) = logF.col(i-1) + neg_log_densityF.simulate();
+     }
   }
  
   for(int i=0;i<timeSteps;i++){ // calc ssb
@@ -176,14 +171,17 @@ Type objective_function<Type>::operator() ()
       predN(stateDimN-1)=log(exp(logN(stateDimN-2,i-1)-exp(logF((keyLogFsta(0,stateDimN-2)),i-1))-natMor(i-1,stateDimN-2))+
                              exp(logN(stateDimN-1,i-1)-exp(logF((keyLogFsta(0,stateDimN-1)),i-1))-natMor(i-1,stateDimN-1))); 
     }
-    ans+=neg_log_densityN(logN.col(i)-predN); // N-Process likelihood 
+    ans+=neg_log_densityN(logN.col(i)-predN); // N-Process likelihood
+    SIMULATE {
+      logN.col(i) = predN + neg_log_densityN.simulate();
+    }
   }
 
 
   // Now finally match to observations
   int f, ft, a, y; 
   int minYear=CppAD::Integer((obs(0,0)));
-  Type predObs, zz, var;
+  Type predObs=0, zz, var;
   for(int i=0;i<nobs;i++){
     y=CppAD::Integer(obs(i,0))-minYear;
     f=CppAD::Integer(obs(i,1));
@@ -221,6 +219,15 @@ Type objective_function<Type>::operator() ()
     }      
     var=varLogObs(CppAD::Integer(keyVarObs(f-1,a)));
     ans+=-dnorm(log(obs(i,3)),predObs,sqrt(var),true);
+    SIMULATE {
+      obs(i,3) = exp( rnorm(predObs, sqrt(var)) ) ;
+    }
+  }
+
+  SIMULATE {
+    REPORT(logF);
+    REPORT(logN);
+    REPORT(obs);
   }
   // ADREPORT(logN);
   // ADREPORT(logF);

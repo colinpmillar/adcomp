@@ -16,7 +16,10 @@ $(all_examples) : % : %.output.RData
 	
 
 report:
-	R --slave < tools/unittest.R
+	report_level=0 R --slave < tools/unittest.R
+
+report-full:
+	report_level=1 R --slave < tools/unittest.R
 
 clean :
 	rm -rf *.o *.so *.dll *~ core *.output.RData *.pdf *.profile
@@ -30,3 +33,11 @@ clean :
 
 profile_all: $(outputfiles) $(profiletargets)
 
+##########################################################
+## For travis tests
+test:
+	make $(examples) | grep slave
+	make report
+	cat REPORT.md
+	if grep -q FALSE REPORT.md; then exit 1; fi;
+	if grep -q NA REPORT.md; then exit 1; fi;

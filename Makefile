@@ -39,14 +39,6 @@ check:
 unlock:
 	rm -rf `Rscript --vanilla -e 'writeLines(.Library)'`/00LOCK-TMB
 
-.PHONY: dox
-dox:
-	sed -i s/^PROJECT_NUMBER.*/PROJECT_NUMBER=v$(VERSION)/g dox/Doxyfile
-	cd dox; doxygen
-
-dox-clean:
-	cd dox; rm -rf html latex
-
 ## Alternative 'install-metis': Get source code and build...
 ## Select version that match R's Matrix package
 SUITESPARSE = SuiteSparse-4.2.1
@@ -60,7 +52,7 @@ $(SUITESPARSE).tar.gz :
 $(METIS).tar.gz :
 	$(WGET) http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/OLD/$(METIS).tar.gz
 
-install-metis-full: $(SUITESPARSE).tar.gz $(METIS).tar.gz
+SuiteSparse: $(SUITESPARSE).tar.gz $(METIS).tar.gz
 	tar zxfv $(SUITESPARSE).tar.gz
 	cd SuiteSparse; cp ../$(METIS).tar.gz .
 	cd SuiteSparse; tar zxfv $(METIS).tar.gz
@@ -78,6 +70,8 @@ install-metis-full: $(SUITESPARSE).tar.gz $(METIS).tar.gz
 		cd SuiteSparse;							\
 		install_name_tool -id `pwd`/libcholmod.so libcholmod.so;	\
 	fi
+
+install-metis-full: SuiteSparse
 	make build-package
 	LIBCHOLMOD=`pwd`/SuiteSparse/libcholmod.so R CMD INSTALL --preclean $(TARBALL)
 
@@ -107,6 +101,7 @@ cran-version:
 	cd TMB; git clean -xdf
 	sed -i 's/^LinkingTo.*/LinkingTo: Matrix, RcppEigen/' TMB/DESCRIPTION
 	rm -rf TMB/inst/include/Eigen
+	rm -rf TMB/inst/include/unsupported
 	echo "PKG_LIBS = \$$(LAPACK_LIBS) \$$(BLAS_LIBS) \$$(FLIBS) \$$(SHLIB_OPENMP_CFLAGS)" > TMB/src/Makevars
 	echo "PKG_CFLAGS = \$$(SHLIB_OPENMP_CFLAGS)"                                         >> TMB/src/Makevars
 	sed -i /^SystemRequirements.*/d TMB/DESCRIPTION
@@ -118,3 +113,16 @@ cran-version:
 	make eliminate-cout
 	make doc-update
 	make build-package
+
+##########################################################
+## For travis tests
+test:
+	R --version
+	cd tmb_syntax; make test
+	cd tmb_examples; make test
+
+doxygen:
+	cd dox; make all
+
+cran-check:
+	R CMD check --as-cran $(TARBALL)

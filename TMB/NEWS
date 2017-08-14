@@ -1,4 +1,143 @@
 ------------------------------------------------------------------------
+TMB 1.7.11 (2017-08-09)
+------------------------------------------------------------------------
+
+o Allow logical data objects
+
+o Fix conversion R <-> C++ of long objects
+  - Can now pass long vector (length >= 2^31) as DATA_VECTOR.
+  - Can now REPORT a long vector.
+  - Can now calculate long jacobian matrices (m*n can be greater than
+    2^31 where n is the number of parameters and m the number of
+    ADREPORTed variables).
+
+o Fixed a possible segmentation fault in sparsity detection algorithm.
+
+o New flag to sdreport() reduces memory usage when bias correcting a
+  large number of variables.
+
+o New experimental function checkConsistency() to check the Laplace
+  approximation and correctness of the user template.
+
+------------------------------------------------------------------------
+TMB 1.7.10 (2017-05-03)
+------------------------------------------------------------------------
+
+o Fix broken Solaris build caused by Eigen 3.3.3 update
+
+------------------------------------------------------------------------
+TMB 1.7.9 (2017-04-12)
+------------------------------------------------------------------------
+
+o Fix PROTECT bugs reported by Tomas Kalibera.
+
+o Now possible to use 'autodiff::hessian' in conjunction with atomic
+  functions.
+
+o Fix 'testthat:::expect_equal(obj, obj)' crash for non-random effect
+  models.
+
+o Fix compatibility issues of 'tmbutils::vector' with eigen 3.3.2.
+
+------------------------------------------------------------------------
+TMB 1.7.8 (2017-02-08)
+------------------------------------------------------------------------
+
+o Internal bug fixes.
+  - Fix bug in GMRF constructor from grid array.
+  - Fix printing of Eigen/AD types (broken by version 1.7.7)
+
+------------------------------------------------------------------------
+TMB 1.7.7 (2017-01-31)
+------------------------------------------------------------------------
+
+o Internal modifications:
+  - Fix Eigen 3.3.2 compatibility issues.
+  - Disable dynamic symbols.
+
+------------------------------------------------------------------------
+TMB 1.7.6 (2017-01-15)
+------------------------------------------------------------------------
+
+o Add Conway-Maxwell-Poisson distribution (dcompois, rcompois).
+
+o Add lfactorial.
+
+o Move MCMC to separate package.
+
+o Add simulators for exponential, beta, F, logistic, Student T, and
+  Weibull distributions.
+
+o Fix a bug in function 'split'.
+
+------------------------------------------------------------------------
+TMB 1.7.5 (2016-11-20)
+------------------------------------------------------------------------
+
+o Atomic logspace_add and logspace_sub.
+
+o Numerically robust binomial and negative binomial density functions.
+
+o New macros:
+  - DATA_STRING to pass strings from R.
+  - SIMULATE to mark blocks of simulation code.
+
+o Simulation methods implemented for density classes:
+  - MVNORM, AR1, SCALE, VECSCALE, SEPARABLE, GMRF, ARk.
+
+o R-style simulators now available from the template:
+  - rnorm, runif, rpois, rbinom, rgamma, rnbinom and rnbinom2.
+
+------------------------------------------------------------------------
+TMB 1.7.4 (2016-09-21)
+------------------------------------------------------------------------
+
+o Add onLoad check on 'Matrix' package version.
+
+o runExample: Fixed bug when running all examples from a specified
+  example folder.
+
+o sdreport: Fixed bug in the case with exactly one random effect.
+
+o sdreport: Reduced size of output.
+
+------------------------------------------------------------------------
+TMB 1.7.3 (2016-09-05)
+------------------------------------------------------------------------
+
+o New atomic functions:
+  - pbeta
+  - qbeta
+  - dtweedie
+  - besselK (derivatives wrt both arguments)
+  - besselI (derivatives wrt both arguments)
+  - besselJ (derivatives wrt both arguments)
+  - besselY (derivatives wrt both arguments)
+
+o Adaptive numerical integration:
+  - gauss_kronrod::integrate     (one dimension)
+  - gauss_kronrod::mvIntegrate   (multiple dimensions)
+
+o sdreport: Fix bug that caused bias.correction to break when
+  parameter maps were in use.
+
+------------------------------------------------------------------------
+TMB 1.7.2 (2016-08-09)
+------------------------------------------------------------------------
+
+o sdreport: Allow bias correct in chunks to reduce memory.
+
+o Experimental TMB:::install.contrib to install user contributed cpp
+  code from github.
+
+o Disable CHOLMOD warnings from inner problem when silent=TRUE.
+
+o sdreport: Keep running when solve(hessian) fails.
+
+o sdreport: Fix bug that caused summary(sdreport(.)) to fail when
+  nothing was ADREPORTed.
+
+------------------------------------------------------------------------
 TMB 1.7.1 (2016-05-05)
 ------------------------------------------------------------------------
 

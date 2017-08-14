@@ -7,13 +7,17 @@ importFrom("methods", as, is, new,
 	   cbind2, rbind2)
 importFrom("stats", approx, confint, integrate, median, nlminb,
 	   optim, optimHess, pchisq, qchisq, qnorm, rnorm,
-	   runif, sd, splinefun)
+	   runif, sd, splinefun, var)
 importFrom("utils", as.relistable, relist,
 	   head, tail)
 ## Windows specific imports
 if(.Platform$OS.type == "windows"){
     importFrom("utils", shortPathName)
 }
+## TMB:::install.contrib
+importFrom("utils", download.file, file_test, unzip)
+## TMB:::.onLoad
+importFrom("utils", packageVersion)
 
 ## Recommended R - packages ----------------------
 importClassesFrom("Matrix")# all currently (FIXME) , corMatrix, dgCMatrix, dgTMatrix, dpoMatrix)
@@ -26,7 +30,9 @@ importFrom("Matrix",
 
 ###____________________ EXPORTS ___________________________________
 
-export(benchmark, compile,
+export(benchmark,
+       checkConsistency,
+       compile,
        config,
        dynlib,
        gdbsource,
@@ -39,11 +45,13 @@ export(benchmark, compile,
        plot.tmbprofile,
        precompile,
        print.backtrace,
+       print.checkConsistency,
        print.sdreport,
        Rinterface,
        runExample,
        runSymbolicAnalysis,
        sdreport,
+       summary.checkConsistency,
        summary.sdreport,
        template,
        tmbprofile)
@@ -60,5 +68,5 @@ S3method(plot, parallelBenchmark)
 
 S3method(print, backtrace)
 
-## MCMC :
-export(run_mcmc)
+S3method(print, checkConsistency)
+S3method(summary, checkConsistency)

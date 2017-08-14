@@ -28,7 +28,7 @@
    the library.
 */
 
-/** \brief TMB: SEXP type */
+/** \internal \brief TMB: SEXP type */
 struct SEXP_t{
   SEXP value;				/**< \brief SEXP_t: data entry*/
   SEXP_t(SEXP x)CSKIP({value=x;})	/**< \brief SEXP_t: assignment*/
@@ -36,7 +36,7 @@ struct SEXP_t{
   operator SEXP()CSKIP({return value;})	/**< \brief SEXP_t:*/
 };
 bool operator<(SEXP_t x, SEXP_t y)CSKIP({return (size_t(x.value)<size_t(y.value));})
-/** \brief Controls the life span of objects created in the C++ template (jointly R/C++)*/
+/** \internal \brief Controls the life span of objects created in the C++ template (jointly R/C++)*/
 struct memory_manager_struct{
   int counter;  /**< \brief Number of objects alive that "memory_manager_struct" has allocated */
   std::map<SEXP_t,SEXP_t> alive;
@@ -71,7 +71,7 @@ memory_manager_struct::memory_manager_struct(){
 #endif
 TMB_EXTERN memory_manager_struct memory_manager;
 
-/** \brief Convert x to TMB-format for R/C++ communication
+/** \internal \brief Convert x to TMB-format for R/C++ communication
 
    All external pointers returned from TMB should be placed in a 
    list container of length one. Additional information should be set
@@ -109,7 +109,7 @@ extern "C"{
       if(memory_manager.counter>0){
 	R_gc();
 	R_RunExitFinalizers();
-      }
+      } else break;
     }
     if(memory_manager.counter>0)error("Failed to clean. Please manually clean up before unloading\n");
   }
@@ -122,7 +122,7 @@ TMB_EXTERN bool _openmp CSKIP( =true; )
 TMB_EXTERN bool _openmp CSKIP( =false; )
 #endif
 
-/** \brief Call the optimize method of an ADFun object pointer. */
+/** \internal \brief Call the optimize method of an ADFun object pointer. */
 template<class ADFunPointer>
 void optimizeTape(ADFunPointer pf){
   if(!config.optimize.instantly){
@@ -184,18 +184,28 @@ Rboolean isNumericScalar(SEXP x){
 /* Macros to obtain data and parameters from R */
 
 /** \brief Get parameter matrix from R and declare it as matrix<Type>
-\ingroup macros */
-#define PARAMETER_MATRIX(name) tmbutils::matrix<Type> name(objective_function::fillShape(asMatrix<Type>(objective_function::getShape(#name,&isMatrix)),#name));
+    \ingroup macros */
+#define PARAMETER_MATRIX(name)						\
+tmbutils::matrix<Type> name(objective_function::fillShape(		\
+asMatrix<Type>(objective_function::getShape(#name,&isMatrix)),#name));
+
 /** \brief Get parameter vector from R and declare it as vector<Type> 
-\ingroup macros*/
-#define PARAMETER_VECTOR(name) vector<Type> name(objective_function::fillShape(asVector<Type>(objective_function::getShape(#name,&isNumeric)),#name));
+    \ingroup macros*/
+#define PARAMETER_VECTOR(name)						\
+vector<Type> name(objective_function::fillShape(			\
+asVector<Type>(objective_function::getShape(#name,&isNumeric)),#name));
+
 /** \brief Get parameter scalar from R and declare it as Type
-\ingroup macros */
-#define PARAMETER(name) Type name(objective_function::fillShape(asVector<Type>(objective_function::getShape(#name,&isNumericScalar)),#name)[0]);
+    \ingroup macros */
+#define PARAMETER(name)							\
+Type name(objective_function::fillShape(				\
+asVector<Type>(objective_function::getShape(#name,&isNumericScalar)),	\
+#name)[0]);
+
 /** \brief Get data vector from R and declare it as vector<Type>
     \note If name is found in the parameter list it will be read as a
     parameter vector.
-\ingroup macros */
+    \ingroup macros */
 #define DATA_VECTOR(name)						\
 vector<Type> name;							\
 if (!isNull(getListElement(objective_function::parameters,#name))) {	\
@@ -205,57 +215,101 @@ if (!isNull(getListElement(objective_function::parameters,#name))) {	\
   name = asVector<Type>(getListElement(					\
          objective_function::data,#name,&isNumeric));			\
 }
+
 /** \brief Get data matrix from R and declare it as matrix<Type>
-\ingroup macros */
-#define DATA_MATRIX(name) matrix<Type> name(asMatrix<Type>(	\
-	getListElement(objective_function::data,#name,&isMatrix)));
+    \ingroup macros */
+#define DATA_MATRIX(name)					\
+matrix<Type> name(asMatrix<Type>(				\
+getListElement(objective_function::data,#name,&isMatrix)));
+
 /** \brief Get data scalar from R and declare it as Type
-\ingroup macros */
-#define DATA_SCALAR(name) Type name(asVector<Type>(		\
-	getListElement(objective_function::data,#name,&isNumericScalar))[0]);
+    \ingroup macros */
+#define DATA_SCALAR(name)						\
+Type name(asVector<Type>(getListElement(objective_function::data,	\
+#name,&isNumericScalar))[0]);
+
 /** \brief Get data scalar from R and declare it as int
-\ingroup macros */
+    \ingroup macros */
 #define DATA_INTEGER(name) int name(CppAD::Integer(asVector<Type>(	\
-	getListElement(objective_function::data,#name,&isNumericScalar))[0]));
-/** \brief Get data vector of type "factor" from R and declare it as a zero-based integer vector.
+getListElement(objective_function::data,#name,&isNumericScalar))[0]));
 
-The following example (R code) shows what you have on the R side and what is
-being received by the C++ template:
-   \verbatim
-> x=factor(letters[4:10])
-> x
-[1] d e f g h i j
-Levels: d e f g h i j
+/** \brief Get data vector of type "factor" from R and declare it as a
+    zero-based integer vector.
 
-# The zero-based integer vector that the C++ template sees
-> unclass(x) - 1
-[1] 0 1 2 3 4 5 6
-   \endverbatim
-\ingroup macros*/
+    The following example (R code) shows what you have on the R side
+    and what is being received by the C++ template:
+
+    \verbatim
+    > x=factor(letters[4:10])
+    > x
+    [1] d e f g h i j
+    Levels: d e f g h i j
+
+    # The zero-based integer vector that the C++ template sees
+    > unclass(x) - 1
+    [1] 0 1 2 3 4 5 6
+    \endverbatim
+    \ingroup macros */
 #define DATA_FACTOR(name) vector<int> name(asVector<int>(	\
-	getListElement(objective_function::data,#name,&isNumeric)));
-/** \brief Get data vector of type "integer" from R and declare it vector<int>. (DATA_INTEGER is for a scalar integer) \ingroup macros*/
+getListElement(objective_function::data,#name,&isNumeric)));
+
+/** \brief Get data vector of type "integer" from R and declare it
+    vector<int>. (DATA_INTEGER() is for a scalar integer)
+    \ingroup macros */
 #define DATA_IVECTOR(name) vector<int> name(asVector<int>(	\
-	getListElement(objective_function::data,#name,&isNumeric)));
-/** \brief Get the number of levels of a data factor from R \ingroup macros */
-#define NLEVELS(name) LENGTH(getAttrib(getListElement(this->data,#name),install("levels")))
-/** \brief Get sparse matrix from R and declare it as Eigen::SparseMatrix<Type>  \ingroup macros*/
-#define DATA_SPARSE_MATRIX(name) Eigen::SparseMatrix<Type> name(tmbutils::asSparseMatrix<Type>( \
-	getListElement(objective_function::data,#name,&isValidSparseMatrix)));
+getListElement(objective_function::data,#name,&isNumeric)));
+
+/** \brief Get the number of levels of a data factor from R
+    \ingroup macros */
+#define NLEVELS(name) LENGTH(getAttrib(			\
+getListElement(this->data,#name),install("levels")))
+
+/** \brief Get sparse matrix from R and declare it as
+    Eigen::SparseMatrix<Type>
+    \ingroup macros */
+#define DATA_SPARSE_MATRIX(name)					\
+Eigen::SparseMatrix<Type> name(tmbutils::asSparseMatrix<Type>(		\
+getListElement(objective_function::data,#name,&isValidSparseMatrix)));
+
 // NOTE: REPORT() constructs new SEXP so never report in parallel!
-/** \brief Report scalar, vector or array back to R without derivative information. Important: \c REPORT(name) must not be used before \c name has been assigned a value \ingroup macros */
-#define REPORT(name) if(isDouble<Type>::value && this->current_parallel_region<0){          \
-                        defineVar(install(#name),asSEXP(name),objective_function::report);}
-/** \brief Report scalar, vector or array back to R with derivative information. 
- The result is retrieved in R via the R function \c sdreport().
- Important: \c ADREPORT(name) must not be used before \c name has been assigned a value \ingroup macros*/
+/** \brief Report scalar, vector or array back to R without derivative
+    information.
+
+    \warning \c REPORT(name) must not be used before \c name has been
+    assigned a value.
+    \note REPORT() does nothing in parallel mode (construction of
+    R-objects is not allowed in parallel).
+    \ingroup macros */
+#define REPORT(name)                                            \
+if(isDouble<Type>::value && this->current_parallel_region<0) {  \
+  defineVar(install(#name),                                     \
+            asSEXP_protect(name),objective_function::report);   \
+  UNPROTECT(1);                                                 \
+}
+
+/** \brief Mark code that is only executed during simulation.
+
+    \note SIMULATE() does nothing in parallel mode.
+    \ingroup macros
+*/
+#define SIMULATE							\
+if(isDouble<Type>::value && objective_function::do_simulate)
+
+/** \brief Report scalar, vector or array back to R with derivative
+    information.
+
+    The result is retrieved in R via the R function \c sdreport().
+    \warning \c ADREPORT(name) must not be used before \c name has
+    been assigned a value.
+    \ingroup macros */
 #define ADREPORT(name) objective_function::reportvector.push(name,#name);
+
 #define PARALLEL_REGION if(this->parallel_region())
+
 /** \brief Get data array from R and declare it as array<Type>
     \note If name is found in the parameter list it will be read as a
-    parameter array.  
-
-\ingroup macros*/
+    parameter array.
+    \ingroup macros*/
 #define DATA_ARRAY(name)						\
 tmbutils::array<Type> name;						\
 if (!isNull(getListElement(objective_function::parameters,#name))) {	\
@@ -265,26 +319,54 @@ if (!isNull(getListElement(objective_function::parameters,#name))) {	\
   name = tmbutils::asArray<Type>(getListElement(			\
          objective_function::data,#name,&isArray));			\
 }
-/** \brief Get parameter array from R and declare it as array<Type> \ingroup macros */
-#define PARAMETER_ARRAY(name) tmbutils::array<Type> name(objective_function::fillShape(tmbutils::asArray<Type>(objective_function::getShape(#name,&isArray)),#name));
-/** \brief Get data matrix from R and declare it as matrix<int> \ingroup macros */
+
+/** \brief Get parameter array from R and declare it as array<Type>
+    \ingroup macros */
+#define PARAMETER_ARRAY(name)					\
+tmbutils::array<Type> name(objective_function::fillShape(	\
+tmbutils::asArray<Type>(objective_function::getShape(		\
+#name,&isArray)),#name));
+
+/** \brief Get data matrix from R and declare it as matrix<int>
+    \ingroup macros */
 #define DATA_IMATRIX(name) matrix<int> name(asMatrix<int>(	\
-	getListElement(objective_function::data,#name,&isMatrix)));
-/** \brief Get data array from R and declare it as array<int> \ingroup macros */
-#define DATA_IARRAY(name) tmbutils::array<int> name(tmbutils::asArray<int>(	\
+getListElement(objective_function::data,#name,&isMatrix)));
+
+/** \brief Get data array from R and declare it as array<int>
+    \ingroup macros */
+#define DATA_IARRAY(name) tmbutils::array<int> name(tmbutils::asArray<int>( \
 	getListElement(objective_function::data,#name,&isArray)));
-/** \brief Get data list object from R and makes it available in C++
+
+/** \brief Get string from R and declare it as std::string
+
+    Example (incomplete) of use:
+    \code
+    vector<std::string> options(2);
+    options << "apple", "orange";
+    DATA_STRING(choice);
+    if(! (choice == options).any() )
+      error( ("'" + choice + "'" + " not valid").c_str() );
+    \endcode
+
+    \ingroup macros
+*/
+#define DATA_STRING(name)                                                      \
+  std::string name =                                                           \
+      CHAR(STRING_ELT(getListElement(objective_function::data, #name), 0));
+
+/** \brief Get data list object from R and make it available in C++
 
 Example (incomplete) of use:
+
 In R: 
-\verbatim
+\code
 data <- list()
 data$object <- list(a=1:10, b=matrix(1:6,2))
 obj <- MakeADFun(data,........) 
-\endverbatim
+\endcode
 
 In C++: 
-\verbatim
+\code
 // Corresponding list object on the C++ side
 template<class Type>
 struct my_list {
@@ -304,12 +386,13 @@ Type objective_function<Type>::operator() ()
   REPORT(object.b);
   return 0;
 }
-\endverbatim
+\endcode
 \ingroup macros
 */ 
-#define DATA_STRUCT(name, struct)struct<Type> name(getListElement(this->data,#name));
+#define DATA_STRUCT(name, struct)			\
+struct<Type> name(getListElement(this->data,#name));
 
-/* Utilities for OSA residuals */
+/** \brief Utilities for OSA residuals */
 template<class VT, class Type>
 struct data_indicator : VT{
   VT cdf_lower, cdf_upper;
@@ -329,7 +412,10 @@ struct data_indicator : VT{
 };
 
 /** \brief Declare an indicator array 'name' of same shape as 'obs'.
- \ingroup macros */
+
+    This is used in conjunction with one-step-ahead residuals - see
+    ?oneStepPredict
+    \ingroup macros */
 #define DATA_ARRAY_INDICATOR(name, obs)					\
 data_indicator<tmbutils::array<Type>, Type > name(obs);			\
 if (!isNull(getListElement(objective_function::parameters,#name))) {	\
@@ -338,7 +424,10 @@ if (!isNull(getListElement(objective_function::parameters,#name))) {	\
 }
 
 /** \brief Declare an indicator vector 'name' of same shape as 'obs'.
- \ingroup macros */
+
+    This is used in conjunction with one-step-ahead residuals - see
+    ?oneStepPredict
+    \ingroup macros */
 #define DATA_VECTOR_INDICATOR(name, obs)				\
 data_indicator<tmbutils::vector<Type>, Type > name(obs);		\
 if (!isNull(getListElement(objective_function::parameters,#name))) {	\
@@ -347,7 +436,7 @@ if (!isNull(getListElement(objective_function::parameters,#name))) {	\
 }
 
 // kasper: Not sure used anywhere
-/** \brief Get the hessian sparsity pattern of ADFun object pointer
+/** \internal \brief Get the hessian sparsity pattern of ADFun object pointer
 \deprecated Kasper is not sure that this code is used anywhere? 
 */
 template<class Type>
@@ -362,11 +451,11 @@ matrix<int> HessianSparsityPattern(ADFun<Type> *pf){
     }
   pf->ForSparseJac(n, Px);
   vector<bool> Py(1); Py[0]=true;
-  return asMatrix(vector<int>(pf->RevSparseHes(n,Py)),n,n);
+  vector<int> tmp = (pf->RevSparseHes(n,Py)).template cast<int>();
+  return asMatrix(tmp, n, n);
 }
 
-
-/** \brief Get list element named "str", or return NULL */ 
+/** \internal \brief Get list element named "str", or return NULL */
 #ifdef WITH_LIBTMB
 SEXP getListElement(SEXP list, const char *str, RObjectTester expectedtype=NULL);
 #else
@@ -388,10 +477,10 @@ SEXP getListElement(SEXP list, const char *str, RObjectTester expectedtype=NULL)
 }
 #endif
 
-/** \brief Do nothing if we are trying to tape non AD-types */
+/** \internal \brief Do nothing if we are trying to tape non AD-types */
 void Independent(vector<double> x)CSKIP({})
 
-/** \brief Used by ADREPORT */
+/** \internal \brief Used by ADREPORT */
 template <class Type>
 struct report_stack{
   vector<const char*> names;
@@ -450,7 +539,12 @@ struct report_stack{
   EIGEN_DEFAULT_DENSE_INDEX_TYPE size(){return result.size();}
 };  // report_stack
 
-/** \brief Type definition of user-provided objective function (i.e. neg. log. like) */
+extern "C" {
+  void GetRNGstate(void);
+  void PutRNGstate(void);
+}
+
+/** \internal \brief Type definition of user-provided objective function (i.e. neg. log. like) */
 template <class Type>
 class objective_function
 {
@@ -518,6 +612,10 @@ public:
     parallel_ignore_statements=false;
   }
 
+  bool do_simulate;   /** \brief Flag set when in simulation mode */
+  void set_simulate(bool do_simulate_) {
+    do_simulate = do_simulate_;
+  }
 
   /* data_ and parameters_ are R-lists containing R-vectors or R-matrices.
      report_ is an R-environment.  
@@ -552,6 +650,15 @@ public:
     selected_parallel_region=-1;
     max_parallel_regions=-1;
     reversefill=false;
+    do_simulate = false;
+    GetRNGstate(); /* Read random seed from R. Note: by default we do
+                      not write the seed back to R *after*
+                      simulation. This ensures that multiple tapes for
+                      one model object get the same seed. When in
+                      simulation mode (enabled when calling
+                      obj$simulate() from R) we *do* write the seed
+                      back after simulation in order to get varying
+                      replicates. */
   }
 
   /** \brief Extract theta vector from objetive function object */
@@ -693,14 +800,9 @@ public:
        If not, we assume that the "epsilon method" has been requested from R, I.e.
        that the un-used theta parameters are reserved for an inner product contribution
        with the numbers reported via ADREPORT. */
-    if(index!=theta.size()){
-      if( index + reportvector.size() != theta.size() )
-	error("evalUserTemplate: Invalid parameter length.");
-      if( reportvector.size() > 0 ){
-	vector<Type> epsilon(reportvector.size());
-	this->fill(epsilon,"epsilon"); /* Assume theta has been sufficiently augmented */
-	ans += ( this->reportvector.result * epsilon ).sum();
-      }
+    if(index != theta.size()){
+      PARAMETER_VECTOR( TMB_epsilon_ );
+      ans += ( this->reportvector.result * TMB_epsilon_ ).sum();
     }
     return ans;
   }
@@ -734,6 +836,7 @@ public:
     substantially more difficult with parallel accumulation turned
     on).
 
+    \ingroup parallel
 */
 template<class Type>
 struct parallel_accumulator{
@@ -761,7 +864,7 @@ struct parallel_accumulator{
 
 #ifndef WITH_LIBTMB
 
-/** \brief Evaluates an ADFun object from R
+/** \internal \brief Evaluates an ADFun object from R
 
    Template argument can be "ADFun" or an object extending
    "ADFun" such as "parallelADFun".
@@ -860,18 +963,17 @@ SEXP EvalADFunObjectTemplate(SEXP f, SEXP theta, SEXP control)
     }
   }
   if(order==1){
-    //PROTECT(res=asSEXP(asMatrix(pf->Jacobian(x),m,n)));
     if(doforward)pf->Forward(0,x);
-    vector<double> jac(n*m);
+    matrix<double> jac(m, n);
     vector<double> u(n);
     vector<double> v(m);
-    for(int i=0;i<m;i++) v[i] = 0.0;
-    for(int i=0;i<m;i++){
+    v.setZero();
+    for(int i=0; i<m; i++) {
       v[i] = 1.0; u = pf->Reverse(1,v);
       v[i] = 0.0;
-      for(int j=0;j<n;j++) jac[i*n+j] = u[j];
+      jac.row(i) = u;
     }
-    PROTECT(res=asSEXP(asMatrix(jac,m,n)));
+    PROTECT( res = asSEXP(jac) );
   }
   //if(order==2)res=asSEXP(pf->Hessian(x,0),1);
   if(order==2){
@@ -892,7 +994,7 @@ SEXP EvalADFunObjectTemplate(SEXP f, SEXP theta, SEXP control)
   return res;
 } // EvalADFunObjectTemplate
 
-/** \brief Garbage collect an ADFun or parallelADFun object pointer */
+/** \internal \brief Garbage collect an ADFun or parallelADFun object pointer */
 template <class ADFunType>
 void finalize(SEXP x)
 {
@@ -902,8 +1004,8 @@ void finalize(SEXP x)
 }
 
 
-/** \brief Construct ADFun object */
-ADFun<double>* MakeADFunObject(SEXP data, SEXP parameters,
+/** \internal \brief Construct ADFun object */
+ADFun<double>* MakeADFunObject_(SEXP data, SEXP parameters,
 			       SEXP report, SEXP control, int parallel_region=-1,
 			       SEXP &info=R_NilValue)
 {
@@ -933,7 +1035,7 @@ ADFun<double>* MakeADFunObject(SEXP data, SEXP parameters,
 extern "C"
 {
 
-  /** \brief Garbage collect an ADFun object pointer */
+  /** \internal \brief Garbage collect an ADFun object pointer */
   void finalizeADFun(SEXP x)
   {
     ADFun<double>* ptr=(ADFun<double>*)R_ExternalPtrAddr(x);
@@ -947,7 +1049,7 @@ extern "C"
     memory_manager.CallCFinalizer(x);
   }
 
-  /** \brief Construct ADFun object */
+  /** \internal \brief Construct ADFun object */
   SEXP MakeADFunObject(SEXP data, SEXP parameters,
 		       SEXP report, SEXP control)
   {
@@ -985,7 +1087,7 @@ extern "C"
       for(int i=0;i<n;i++){
 	TMB_TRY {
 	  pfvec[i] = NULL;
-	  pfvec[i] = MakeADFunObject(data, parameters, report, control, i, info);
+	  pfvec[i] = MakeADFunObject_(data, parameters, report, control, i, info);
 	  if (config.optimize.instantly) pfvec[i]->optimize();
 	}
 	TMB_CATCH { bad_thread_alloc = true; }
@@ -1003,7 +1105,7 @@ extern "C"
       TMB_TRY{
 	/* Actual work: tape creation */
 	pf = NULL;
-	pf = MakeADFunObject(data, parameters, report, control, -1, info);
+	pf = MakeADFunObject_(data, parameters, report, control, -1, info);
 	if (config.optimize.instantly) pf->optimize();
       }
       TMB_CATCH {
@@ -1045,7 +1147,7 @@ extern "C"
     return ans;
   }
 
-  /** \brief Call tape optimization function in CppAD */
+  /** \internal \brief Call tape optimization function in CppAD */
   SEXP optimizeADFunObject(SEXP f)
   {
     SEXP tag=R_ExternalPtrTag(f);
@@ -1062,7 +1164,7 @@ extern "C"
     return R_NilValue;
   }
 
-  /** \brief Get tag of external pointer */
+  /** \internal \brief Get tag of external pointer */
   SEXP getTag(SEXP f){
     return R_ExternalPtrTag(f);
   }
@@ -1127,6 +1229,7 @@ extern "C"
   SEXP EvalDoubleFunObject(SEXP f, SEXP theta, SEXP control)
   {
     TMB_TRY {
+      int do_simulate = INTEGER(getListElement(control, "do_simulate"))[0];
       objective_function<double>* pf;
       pf = (objective_function<double>*) R_ExternalPtrAddr(f);
       PROTECT( theta=coerceVector(theta,REALSXP) );
@@ -1141,8 +1244,14 @@ extern "C"
       pf->parnames.resize(0); // To avoid mem leak.
       pf->reportvector.clear();
       SEXP res;
-      res = asSEXP( pf->operator()() );
-      UNPROTECT(1);
+      GetRNGstate();   /* Get seed from R */
+      if(do_simulate) pf->set_simulate( true );
+      PROTECT( res = asSEXP( pf->operator()() ) );
+      if(do_simulate) {
+        pf->set_simulate( false );
+        PutRNGstate(); /* Write seed back to R */
+      }
+      UNPROTECT(2);
       return res;
     }
     TMB_CATCH {
@@ -1150,7 +1259,7 @@ extern "C"
     }
   }
 
-  /** \brief Gets parameter order by running the user template
+  /** \internal \brief Gets parameter order by running the user template
 
    We spend a function evaluation on getting the parameter order (!) */
   SEXP getParameterOrder(SEXP data, SEXP parameters, SEXP report)
@@ -1172,7 +1281,7 @@ extern "C"
 } /* Double interface */
 
 
-ADFun< double >* MakeADGradObject(SEXP data, SEXP parameters, SEXP report, int parallel_region=-1)
+ADFun< double >* MakeADGradObject_(SEXP data, SEXP parameters, SEXP report, int parallel_region=-1)
 {
   /* Create ADFun pointer */
   objective_function< AD<AD<double> > > F(data,parameters,report);
@@ -1195,7 +1304,7 @@ ADFun< double >* MakeADGradObject(SEXP data, SEXP parameters, SEXP report, int p
 extern "C"
 {
 
-  /** \brief Tape the gradient using nested AD types */
+  /** \internal \brief Tape the gradient using nested AD types */
   SEXP MakeADGradObject(SEXP data, SEXP parameters, SEXP report)
   {
     ADFun<double>* pf = NULL;
@@ -1225,7 +1334,7 @@ extern "C"
       for(int i=0;i<n;i++){
 	TMB_TRY {
 	  pfvec[i] = NULL;
-	  pfvec[i] = MakeADGradObject(data, parameters, report, i);
+	  pfvec[i] = MakeADGradObject_(data, parameters, report, i);
 	  if (config.optimize.instantly) pfvec[i]->optimize();
 	}
 	TMB_CATCH { bad_thread_alloc = true; }
@@ -1243,7 +1352,7 @@ extern "C"
       /* Actual work: tape creation */
       TMB_TRY {
         pf = NULL;
-        pf = MakeADGradObject(data, parameters, report, -1);
+        pf = MakeADGradObject_(data, parameters, report, -1);
         if(config.optimize.instantly)pf->optimize();
       }
       TMB_CATCH {
@@ -1265,13 +1374,13 @@ extern "C"
 }
 
 
-/** \brief Tape the hessian[cbind(i,j)] using nested AD types.
+/** \internal \brief Tape the hessian[cbind(i,j)] using nested AD types.
 
     skip: integer vector of columns to skip from the hessian (will not
           change dimension - only treat h[:,skip] and h[skip,:] as
           zero). Negative subscripts are not allowed.
 */
-sphess MakeADHessObject2(SEXP data, SEXP parameters, SEXP report, SEXP skip, int parallel_region=-1)
+sphess MakeADHessObject2_(SEXP data, SEXP parameters, SEXP report, SEXP skip, int parallel_region=-1)
 {
   /* Some type checking */
   if(!isNewList(data))error("'data' must be a list");
@@ -1356,7 +1465,7 @@ sphess MakeADHessObject2(SEXP data, SEXP parameters, SEXP report, SEXP skip, int
 
 // kasper: Move to new file e.g. "convert.hpp"
 template <class ADFunType>
-/** \brief Convert sparse matrix H to SEXP format that can be returned to R */
+/** \internal \brief Convert sparse matrix H to SEXP format that can be returned to R */
 SEXP asSEXP(const sphess_t<ADFunType> &H, const char* tag)
 {
     SEXP par;
@@ -1367,9 +1476,13 @@ SEXP asSEXP(const sphess_t<ADFunType> &H, const char* tag)
     R_RegisterCFinalizer(res, finalize<ADFunType>);
     /* Return list */
     SEXP ans;
-    setAttrib(res,install("par"),par);
-    setAttrib(res,install("i"),asSEXP(H.i));
-    setAttrib(res,install("j"),asSEXP(H.j));
+    /* Implicitly protected temporaries */
+    SEXP par_symbol = install("par");
+    SEXP i_symbol = install("i");
+    SEXP j_symbol = install("j");
+    setAttrib(res, par_symbol, par);
+    setAttrib(res, i_symbol, asSEXP(H.i));
+    setAttrib(res, j_symbol, asSEXP(H.j));
     PROTECT(ans=ptrList(res));
     UNPROTECT(2);
     return ans;
@@ -1396,7 +1509,7 @@ extern "C"
     for (int i=0; i<n; i++) {
       TMB_TRY {
 	Hvec[i] = NULL;
-	Hvec[i] = new sphess( MakeADHessObject2(data, parameters, report, skip, i) );
+	Hvec[i] = new sphess( MakeADHessObject2_(data, parameters, report, skip, i) );
 	optimizeTape( Hvec[i]->pf );
       }
       TMB_CATCH { bad_thread_alloc = true; }
@@ -1417,7 +1530,7 @@ extern "C"
   SEXP MakeADHessObject2(SEXP data, SEXP parameters, SEXP report, SEXP skip){
     sphess* pH = NULL;
     TMB_TRY {
-      pH = new sphess( MakeADHessObject2(data, parameters, report, skip, -1) );
+      pH = new sphess( MakeADHessObject2_(data, parameters, report, skip, -1) );
       optimizeTape( pH->pf );
       return asSEXP(*pH, "ADFun");
     }
@@ -1472,17 +1585,42 @@ extern "C"
    relevant to avoid symbol lookup overhead for those routines that
    are called many times e.g. EvalADFunObject. */
 extern "C"{
+  /* May be used as part of custom calldef tables */
+#define TMB_CALLDEFS                                            \
+  {"MakeADFunObject",     (DL_FUNC) &MakeADFunObject,     4},   \
+  {"InfoADFunObject",     (DL_FUNC) &InfoADFunObject,     1},   \
+  {"EvalADFunObject",     (DL_FUNC) &EvalADFunObject,     3},   \
+  {"MakeDoubleFunObject", (DL_FUNC) &MakeDoubleFunObject, 3},   \
+  {"EvalDoubleFunObject", (DL_FUNC) &EvalDoubleFunObject, 3},   \
+  {"getParameterOrder",   (DL_FUNC) &getParameterOrder,   3},   \
+  {"MakeADGradObject",    (DL_FUNC) &MakeADGradObject,    3},   \
+  {"MakeADHessObject2",   (DL_FUNC) &MakeADHessObject2,   4},   \
+  {"usingAtomics",        (DL_FUNC) &usingAtomics,        0},   \
+  {"TMBconfig",           (DL_FUNC) &TMBconfig,           2}
+  /* Default (optional) calldef table. */
 #ifdef TMB_LIB_INIT
 #include <R_ext/Rdynload.h>
-#define CALLDEF(name, n) {#name, (DL_FUNC) &name, n}
 static R_CallMethodDef CallEntries[] = {
-  CALLDEF(EvalADFunObject, 3),
-  CALLDEF(EvalDoubleFunObject, 3),
+  TMB_CALLDEFS
+  ,
+  /* User's R_unload_lib function must also be registered (because we
+     disable dynamic lookup - see below). The unload function is
+     mainly useful while developing models in order to clean up
+     external pointers without restarting R. Should not be used by TMB
+     dependent packages. */
+#ifdef LIB_UNLOAD
+#define xstringify(s) stringify(s)
+#define stringify(s) #s
+  {xstringify(LIB_UNLOAD), (DL_FUNC) &LIB_UNLOAD, 1},
+#undef xstringify
+#undef stringify
+#endif
+  /* End of table */
   {NULL, NULL, 0}
 };
 void TMB_LIB_INIT(DllInfo *dll){
   R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+  R_useDynamicSymbols(dll, (Rboolean)FALSE);
 }
-#undef CALLDEF
 #endif /* #ifdef  */
 }
